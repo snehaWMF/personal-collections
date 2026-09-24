@@ -18,6 +18,7 @@ import {
 import ChromeHeader from '@/components/chrome/ChromeHeader.vue'
 import ChromeWrapper from '@/components/chrome/ChromeWrapper.vue'
 import type { HeaderItem } from '@/components/header/headerItems'
+import { useConfig } from '@/composables/useConfig'
 import MobileUserMenu from './MobileUserMenu.vue'
 import PrototypeBadge from './PrototypeBadge.vue'
 import UserMenu from './UserMenu.vue'
@@ -30,6 +31,14 @@ defineProps<{ lastEditedNotice?: boolean }>()
 
 const route = useRoute()
 const router = useRouter()
+
+/**
+ * This prototype is always shown logged in. ProtoWiki keeps the logged-in /
+ * logged-out choice per website, so another prototype on the same site (e.g.
+ * on github.io) can leave it logged out — switch it back when we load.
+ */
+const { user } = useConfig()
+if (user.value === 'logged-out') user.value = 'new'
 const { resetDemo } = useCollections()
 const { state: toast, dismiss } = useToast()
 

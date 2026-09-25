@@ -8,7 +8,6 @@ import { onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { CdxButton, CdxIcon } from '@wikimedia/codex'
 import {
-  cdxIconBookmarkList,
   cdxIconLogOut,
   cdxIconUserAvatar,
   cdxIconUserAvatarOutline,
@@ -16,6 +15,7 @@ import {
   cdxIconWatchlist,
 } from '@wikimedia/codex-icons'
 
+import { iconSaved } from './icons'
 import { SAVED_PATH } from './useCollections'
 
 const open = ref(false)
@@ -71,7 +71,7 @@ onBeforeUnmount(() => {
       </li>
       <li>
         <RouterLink :to="SAVED_PATH" class="pc-mobile-user-menu__link" @click="open = false">
-          <CdxIcon :icon="cdxIconBookmarkList" />Saved
+          <CdxIcon :icon="iconSaved" />Saved
         </RouterLink>
       </li>
       <li>

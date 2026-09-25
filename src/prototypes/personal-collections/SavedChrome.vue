@@ -10,7 +10,6 @@ import { CdxButton, CdxIcon, CdxMessage } from '@wikimedia/codex'
 import {
   cdxIconAppearance,
   cdxIconBell,
-  cdxIconBookmarkList,
   cdxIconTray,
   cdxIconWatchlist,
 } from '@wikimedia/codex-icons'
@@ -19,6 +18,7 @@ import ChromeHeader from '@/components/chrome/ChromeHeader.vue'
 import ChromeWrapper from '@/components/chrome/ChromeWrapper.vue'
 import type { HeaderItem } from '@/components/header/headerItems'
 import { useConfig } from '@/composables/useConfig'
+import { iconSaved } from './icons'
 import MobileUserMenu from './MobileUserMenu.vue'
 import PrototypeBadge from './PrototypeBadge.vue'
 import UserMenu from './UserMenu.vue'
@@ -109,7 +109,7 @@ watch(
               aria-label="Saved items"
               title="Saved items"
             >
-              <CdxIcon :icon="cdxIconBookmarkList" />
+              <CdxIcon :icon="iconSaved" />
             </RouterLink>
             <CdxButton weight="quiet" aria-label="Watchlist">
               <CdxIcon :icon="cdxIconWatchlist" />

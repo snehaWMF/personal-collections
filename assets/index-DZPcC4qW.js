@@ -1,0 +1,1 @@
+import{d as r,c as a,x as s,y as c,o as n}from"./index-BZeHJsZb.js";import{A as i}from"./useCollections-DpNlZP8x.js";const d=r({__name:"index",setup(l){const t=s(),o=c(),e={...t.query};return e.article!==void 0&&(e.title=e.article,delete e.article),window.location.replace(o.resolve({path:i,query:e}).href),(u,p)=>(n(),a("span"))}});export{d as default};

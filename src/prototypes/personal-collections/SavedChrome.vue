@@ -21,6 +21,7 @@ import { useConfig } from '@/composables/useConfig'
 import { iconSaved } from './icons'
 import MobileUserMenu from './MobileUserMenu.vue'
 import PrototypeBadge from './PrototypeBadge.vue'
+import SavedTip from './SavedTip.vue'
 import UserMenu from './UserMenu.vue'
 import { SAVED_PATH, useCollections } from './useCollections'
 import { STICKY_HEADER_HEIGHT, stickyHeader } from './useStickyHeader'
@@ -72,8 +73,8 @@ onMounted(() => {
 onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 
 /**
- * Hidden `?reset` on any page → saved items but no collections yet (for showing
- * a first collection being made), then tidy the URL.
+ * Hidden `?reset` on any page → start from scratch (nothing saved, no
+ * collections, first-save onboarding), then tidy the URL.
  */
 watch(
   () => route.query.reset,
@@ -103,14 +104,18 @@ watch(
             <CdxButton weight="quiet" aria-label="Notices">
               <CdxIcon :icon="cdxIconTray" />
             </CdxButton>
-            <RouterLink
-              class="saved-chrome__icon-link"
-              :to="SAVED_PATH"
-              aria-label="Saved items"
-              title="Saved items"
-            >
-              <CdxIcon :icon="iconSaved" />
-            </RouterLink>
+            <!-- Desktop's first-save tip points here, at the Saved page link. -->
+            <span class="saved-chrome__saved">
+              <RouterLink
+                class="saved-chrome__icon-link"
+                :to="SAVED_PATH"
+                aria-label="Saved items"
+                title="Saved items"
+              >
+                <CdxIcon :icon="iconSaved" />
+              </RouterLink>
+              <SavedTip :caret="20" />
+            </span>
             <CdxButton weight="quiet" aria-label="Watchlist">
               <CdxIcon :icon="cdxIconWatchlist" />
             </CdxButton>
@@ -169,6 +174,11 @@ watch(
   flex-direction: column;
   align-items: flex-end;
   gap: var(--spacing-50, 8px);
+}
+
+.saved-chrome__saved {
+  position: relative;
+  display: inline-flex;
 }
 
 .saved-chrome__icon-link {

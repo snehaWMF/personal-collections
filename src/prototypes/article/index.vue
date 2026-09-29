@@ -39,7 +39,7 @@ import { useToast } from '../personal-collections/useToast'
 
 const route = useRoute()
 const router = useRouter()
-const { isSaved, save, addToCollection, findPassage, startArticle } = useCollections()
+const { isSaved, save, addToCollection, findPassage, startArticle, onboarding } = useCollections()
 const { show, dismiss } = useToast()
 
 const article = computed(() => normalizeTitle(String(route.query.title || startArticle.value)))
@@ -120,9 +120,25 @@ async function requestSave(target: SaveTarget) {
   } else {
     save(target)
     popoverMode.value = 'added'
+    if (onboarding.value === 'waiting') onboarding.value = 'armed'
   }
   popoverOpen.value = true
 }
+
+/**
+ * First save from scratch: once its popover (and any Create collection dialog
+ * opened from it) is dismissed, show the "Saved" tip on the user menu. It takes
+ * the place of that save's confirmation message, so only one thing shows.
+ */
+watch(
+  [popoverOpen, dialogOpen, onboarding],
+  ([popover, dialog, step]) => {
+    if (step !== 'armed' || popover || dialog) return
+    dismiss()
+    onboarding.value = 'showing'
+  },
+  { flush: 'post', immediate: true },
+)
 
 function onBookmarkClick() {
   requestSave({ kind: 'article', title: article.value })
@@ -130,6 +146,7 @@ function onBookmarkClick() {
 
 function onCollectionCreated(collection: Collection) {
   addToCollection(popoverTarget.value, collection.id)
+  if (onboarding.value === 'armed') return
   show({
     type: 'success',
     text: `${labelOf(popoverTarget.value)} has been added to`,

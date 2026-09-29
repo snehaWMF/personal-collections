@@ -51,6 +51,12 @@ interface State {
   items: SavedItem[]
   /** Article the prototype opens on when no `?article=` is given. */
   startArticle: string
+  /**
+   * First-save onboarding (only when starting from scratch, `?reset`):
+   * `waiting` for the first save → `armed` while its save popover is up →
+   * `showing` the "Saved" tip on the user menu → `done`. Missing = `done`.
+   */
+  onboarding?: 'waiting' | 'armed' | 'showing' | 'done'
 }
 
 const STORAGE_KEY = 'protowiki:personal-collections:v6'
@@ -221,14 +227,18 @@ const SEED_COLLECTIONS: (Collection & { keys: string[] })[] = [
 ]
 
 /**
- * Starting point: plenty already saved. `withCollections: false` gives the
- * "no collections yet" state for showing the very first collection being made.
+ * Starting point: plenty already saved. `withCollections: false` starts from
+ * scratch — nothing saved, no collections — with the first-save onboarding.
  */
 function seedState(withCollections = true): State {
+  if (!withCollections) {
+    return { startArticle: START_ARTICLE.empty, collections: [], items: [], onboarding: 'waiting' }
+  }
   const now = Date.now()
-  const collections = withCollections ? SEED_COLLECTIONS : []
+  const collections = SEED_COLLECTIONS
   return {
-    startArticle: withCollections ? START_ARTICLE.withCollections : START_ARTICLE.empty,
+    startArticle: START_ARTICLE.withCollections,
+    onboarding: 'done',
     collections: collections.map(({ id, name }) => ({ id, name })),
     items: SEED_TARGETS.map((target, i) => {
       const key = keyOf(target)
@@ -277,7 +287,7 @@ function isState(value: unknown): value is State {
 /**
  * Starting point for this page load, decided before anything renders so the
  * right article loads first time:
- *  - `?reset` → saved items, no collections, opens on Resplendent quetzal
+ *  - `?reset` → nothing saved, no collections, opens on Resplendent quetzal
  *  - bare `/article` → pre-filled collections, opens on Blue-gray tanager
  *  - anything else → carry on with what's stored
  * (`SavedChrome` then tidies `?reset` out of the URL.)
@@ -429,12 +439,18 @@ export function useCollections() {
 
   const startArticle = computed(() => state.startArticle)
 
+  /** First-save onboarding step (see `State.onboarding`). */
+  const onboarding = computed({
+    get: () => state.onboarding ?? 'done',
+    set: (step) => (state.onboarding = step),
+  })
+
   function summary(title: string): ArticleSummary | null | undefined {
     loadSummary(title)
     return summaries[title]
   }
 
-  /** Back to a starting point — pre-filled (bare URL) or no collections (`?reset`). */
+  /** Back to a starting point — pre-filled (bare URL) or from scratch (`?reset`). */
   function resetDemo(withCollections = true): void {
     Object.assign(state, seedState(withCollections))
   }
@@ -458,5 +474,6 @@ export function useCollections() {
     summary,
     resetDemo,
     startArticle,
+    onboarding,
   }
 }

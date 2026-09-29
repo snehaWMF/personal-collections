@@ -64,7 +64,7 @@ onBeforeUnmount(() => {
         <CdxButton size="small" @click="reset(true)">Reset with sample collections</CdxButton>
       </div>
       <div class="pc-proto__option">
-        <CdxButton size="small" @click="reset(false)">Reset with no collections</CdxButton>
+        <CdxButton size="small" @click="reset(false)">Reset with nothing saved</CdxButton>
       </div>
     </div>
 

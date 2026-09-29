@@ -16,6 +16,7 @@ import {
 } from '@wikimedia/codex-icons'
 
 import { iconSaved } from './icons'
+import SavedTip from './SavedTip.vue'
 import { SAVED_PATH } from './useCollections'
 
 const open = ref(false)
@@ -85,6 +86,8 @@ onBeforeUnmount(() => {
         </a>
       </li>
     </ul>
+
+    <SavedTip />
   </div>
 </template>
 

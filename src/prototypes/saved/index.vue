@@ -13,11 +13,8 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { CdxButton, CdxIcon } from '@wikimedia/codex'
 import {
   cdxIconAdd,
-  cdxIconCheck,
   cdxIconDownTriangle,
   cdxIconEllipsis,
-  cdxIconImageGallery,
-  cdxIconListBullet,
   cdxIconLock,
   cdxIconSettings,
 } from '@wikimedia/codex-icons'
@@ -27,6 +24,7 @@ import CollectionThumb from '../personal-collections/CollectionThumb.vue'
 import CreateCollectionDialog from '../personal-collections/CreateCollectionDialog.vue'
 import SavedCard from '../personal-collections/SavedCard.vue'
 import SavedChrome from '../personal-collections/SavedChrome.vue'
+import ViewSettings from '../personal-collections/ViewSettings.vue'
 import { SAVED_PATH, useCollections, type Collection } from '../personal-collections/useCollections'
 import { globalSkin } from '@/theme'
 
@@ -51,32 +49,42 @@ function countLabel(collectionId: string) {
 
 const collectionsTabTo = { path: SAVED_PAGE, query: { view: 'collections' } }
 
-/** Mobile settings menu (gear): switch the item layout between list and grid. */
-const settingsOpen = ref(false)
-const settingsRef = ref<HTMLElement | null>(null)
-const VIEW_OPTIONS = [
-  { value: 'list', label: 'List', icon: cdxIconListBullet },
-  { value: 'grid', label: 'Grid', icon: cdxIconImageGallery },
-] as const
-
-function chooseView(view: 'list' | 'grid') {
-  ui.mobileView = view
-  settingsOpen.value = false
+/**
+ * Which navigation to draw (`ui.nav`, from the Prototype menu):
+ *  - `tabs-desktop`: the original desktop tabs, with the Collections dropdown.
+ *  - `sidebar`: collections always in a sidebar, no dropdown.
+ *  - `tabs`: All items / Collections tabs, the Collections tab a list. Phones
+ *    in both navigations, and desktop pages too narrow for the sidebar.
+ */
+/**
+ * The sidebar only shows when four cards still fit in a row beside it:
+ * sidebar 212 + gap 40, then 4 cards × 194 + 3 gaps × 14. (The grid's
+ * `auto-fill` counts columns at the cards' max width, 194, not their min.)
+ * Measured on the page's content box, so it follows the real space.
+ */
+const SIDEBAR_MIN_WIDTH = 212 + 40 + 4 * 194 + 3 * 14
+const pageRef = ref<{ $el: HTMLElement } | null>(null)
+const pageWidth = ref(Infinity)
+function measurePage(el: HTMLElement) {
+  const style = getComputedStyle(el)
+  pageWidth.value = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
 }
-
-function onSettingsPointerDown(event: PointerEvent) {
-  if (!settingsRef.value?.contains(event.target as Node)) settingsOpen.value = false
-}
-
-function onSettingsKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') settingsOpen.value = false
-}
-
-watch(settingsOpen, (isOpen) => {
-  const method = isOpen ? 'addEventListener' : 'removeEventListener'
-  document[method]('pointerdown', onSettingsPointerDown as EventListener)
-  document[method]('keydown', onSettingsKeydown as EventListener)
+const pageObserver = new ResizeObserver(([entry]) => measurePage(entry.target as HTMLElement))
+// The page renders inside the chrome's slot, which can mount after this does.
+watch(pageRef, (page, old) => {
+  if (old) pageObserver.unobserve(old.$el)
+  if (!page) return
+  measurePage(page.$el)
+  pageObserver.observe(page.$el)
 })
+
+const layout = computed(() => {
+  if (isMobile.value) return 'tabs'
+  if (ui.nav === 'tabs') return 'tabs-desktop'
+  return pageWidth.value < SIDEBAR_MIN_WIDTH ? 'tabs' : 'sidebar'
+})
+/** Sidebar showing on desktop: always in the sidebar navigation, when moved there in tabs. */
+const pinned = computed(() => layout.value === 'sidebar' || ui.pinned)
 
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -107,8 +115,7 @@ watch(dropdownOpen, (isOpen) => {
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocPointerDown)
   document.removeEventListener('keydown', onKeydown)
-  document.removeEventListener('pointerdown', onSettingsPointerDown)
-  document.removeEventListener('keydown', onSettingsKeydown)
+  pageObserver.disconnect()
 })
 
 watch(
@@ -137,7 +144,7 @@ function onCollectionCreated(collection: Collection) {
 
 <template>
   <SavedChrome :last-edited-notice="false">
-    <SpecialPageWrapper class="saved-page" help>
+    <SpecialPageWrapper ref="pageRef" class="saved-page" help>
       <template #title>
         <template v-if="activeCollection"> Saved / {{ activeCollection.name }} </template>
         <template v-else>Saved</template>
@@ -151,8 +158,8 @@ function onCollectionCreated(collection: Collection) {
         />
       </template>
 
-      <!-- ---------- Mobile (Minerva) ---------- -->
-      <template v-if="isMobile">
+      <!-- ---------- Tabs, Collections as a list: phones and narrow windows ---------- -->
+      <template v-if="layout === 'tabs'">
         <nav
           class="saved-m-tabs"
           :class="{ 'saved-m-tabs--in-collection': activeCollection }"
@@ -174,39 +181,8 @@ function onCollectionCreated(collection: Collection) {
           >
             Collections
           </RouterLink>
-          <span ref="settingsRef" class="saved-m-settings">
-            <CdxButton
-              class="saved-m-tabs__settings"
-              weight="quiet"
-              aria-label="Settings"
-              aria-haspopup="true"
-              :aria-expanded="settingsOpen"
-              @click="settingsOpen = !settingsOpen"
-            >
-              <CdxIcon :icon="cdxIconSettings" />
-            </CdxButton>
-            <div v-if="settingsOpen" class="saved-m-settings__panel" role="menu">
-              <p class="saved-m-settings__label">View</p>
-              <button
-                v-for="option in VIEW_OPTIONS"
-                :key="option.value"
-                type="button"
-                class="saved-m-settings__option"
-                role="menuitemradio"
-                :aria-checked="ui.mobileView === option.value"
-                @click="chooseView(option.value)"
-              >
-                <CdxIcon :icon="option.icon" size="small" />
-                <span>{{ option.label }}</span>
-                <CdxIcon
-                  v-if="ui.mobileView === option.value"
-                  class="saved-m-settings__check"
-                  :icon="cdxIconCheck"
-                  size="small"
-                />
-              </button>
-            </div>
-          </span>
+          <!-- List / grid switch is a phone setting. -->
+          <ViewSettings v-if="isMobile" />
         </nav>
 
         <!-- Collections tab: a plain list with item counts. -->
@@ -227,11 +203,16 @@ function onCollectionCreated(collection: Collection) {
           </li>
         </ul>
 
-        <!-- All items, or one collection's items: two-column card grid. -->
+        <!-- All items, or one collection's items: card grid (phones: two columns, or rows). -->
         <template v-else>
           <template v-if="visibleItems.length">
             <p class="saved-page__sort saved-page__sort--mobile">Sorted by most recent</p>
-            <ul v-if="ui.mobileView === 'grid'" class="saved-grid saved-grid--mobile">
+            <ul v-if="!isMobile" class="saved-grid">
+              <li v-for="item in visibleItems" :key="item.key">
+                <SavedCard :item="item" />
+              </li>
+            </ul>
+            <ul v-else-if="ui.mobileView === 'grid'" class="saved-grid saved-grid--mobile">
               <li v-for="item in visibleItems" :key="item.key">
                 <SavedCard :item="item" />
               </li>
@@ -251,7 +232,7 @@ function onCollectionCreated(collection: Collection) {
         </template>
       </template>
 
-      <!-- ---------- Desktop ---------- -->
+      <!-- ---------- Desktop: sidebar navigation, or tabs + dropdown ---------- -->
       <template v-else>
         <div class="saved-page__more-row">
           <CdxButton weight="quiet" aria-label="More options">
@@ -259,15 +240,21 @@ function onCollectionCreated(collection: Collection) {
           </CdxButton>
         </div>
 
-        <div class="saved-page__layout" :class="{ 'saved-page__layout--pinned': ui.pinned }">
+        <div class="saved-page__layout" :class="{ 'saved-page__layout--pinned': pinned }">
           <!--
           Pinned: one "Collections" group, like Wikipedia's pinned Contents/Tools
           menus. "All items" is the first row — a smart collection of everything —
           then the create action, then the reader's collections (newest first, so a
           new one appears right under the button that made it).
+          Sidebar navigation: the same list, without the "Collections" heading.
         -->
-          <nav v-if="ui.pinned" class="saved-sidebar" aria-label="Collections">
-            <div class="saved-sidebar__heading">
+          <nav
+            v-if="pinned"
+            class="saved-sidebar"
+            :class="{ 'saved-sidebar--headless': layout === 'sidebar' }"
+            aria-label="Collections"
+          >
+            <div v-if="layout === 'tabs-desktop'" class="saved-sidebar__heading">
               <span>Collections</span>
               <button type="button" class="saved-chip" @click="ui.pinned = false">hide</button>
             </div>
@@ -302,7 +289,7 @@ function onCollectionCreated(collection: Collection) {
           <div class="saved-page__main">
             <div class="saved-page__toolbar">
               <!-- Unpinned: All items + Collections dropdown -->
-              <div v-if="!ui.pinned" class="saved-tabs">
+              <div v-if="!pinned" class="saved-tabs">
                 <RouterLink
                   class="saved-tabs__tab"
                   :class="{ 'saved-tabs__tab--active': !activeCollection }"
@@ -360,7 +347,7 @@ function onCollectionCreated(collection: Collection) {
             </div>
 
             <template v-if="visibleItems.length">
-              <p v-if="!ui.pinned" class="saved-page__sort">Sorted by most recent</p>
+              <p v-if="!pinned" class="saved-page__sort">Sorted by most recent</p>
               <ul class="saved-grid">
                 <li v-for="item in visibleItems" :key="item.key">
                   <SavedCard :item="item" />
@@ -645,6 +632,18 @@ function onCollectionCreated(collection: Collection) {
 }
 
 /* A line under every row so each reads as its own button. */
+/*
+ * No heading: the list draws the line the heading would have, level with the
+ * top of the cards (below the toolbar: its 8px margin, 44px height, 4px gap).
+ */
+.saved-sidebar--headless {
+  padding-top: calc(var(--spacing-50, 8px) + 44px + var(--spacing-25, 4px));
+}
+
+.saved-sidebar--headless .saved-sidebar__list {
+  border-top: 1px solid var(--border-color-subtle, #c8ccd1);
+}
+
 .saved-sidebar__list li {
   margin: 0;
   border-bottom: 1px solid var(--border-color-subtle, #c8ccd1);
@@ -701,65 +700,6 @@ function onCollectionCreated(collection: Collection) {
   padding-bottom: var(--spacing-50, 8px);
   border-bottom: 1px solid var(--border-color-subtle, #c8ccd1);
   font-size: var(--font-size-small, 14px);
-}
-
-.saved-m-settings {
-  position: relative;
-  margin-inline: auto -6px;
-}
-
-.saved-m-tabs__settings.cdx-button {
-  color: var(--color-base, #202122);
-}
-
-.saved-m-settings__panel {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 40;
-  box-sizing: border-box;
-  min-width: 180px;
-  padding: var(--spacing-50, 8px) 0;
-  border: 1px solid var(--border-color-base, #a2a9b1);
-  border-radius: var(--border-radius-base, 2px);
-  background-color: var(--background-color-base, #fff);
-  box-shadow: var(--box-shadow-medium, 0 2px 8px rgba(0, 0, 0, 0.15));
-}
-
-.saved-m-settings__label {
-  margin: 0;
-  padding: var(--spacing-25, 4px) var(--spacing-100, 16px);
-  color: var(--color-subtle, #54595d);
-  font-size: var(--font-size-x-small, 12px);
-  font-weight: var(--font-weight-bold, 700);
-}
-
-.saved-m-settings__option {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-75, 12px);
-  width: 100%;
-  padding: var(--spacing-50, 8px) var(--spacing-100, 16px);
-  border: 0;
-  background: none;
-  font: inherit;
-  font-size: var(--font-size-medium, 16px);
-  color: var(--color-base, #202122);
-  text-align: start;
-  cursor: pointer;
-}
-
-.saved-m-settings__option:hover {
-  background-color: var(--background-color-interactive-subtle, #f8f9fa);
-}
-
-.saved-m-settings__option :deep(.cdx-icon) {
-  color: var(--color-base, #202122);
-}
-
-.saved-m-settings__option .saved-m-settings__check {
-  margin-inline-start: auto;
-  color: var(--color-progressive, #36c);
 }
 
 .saved-grid--mobile {

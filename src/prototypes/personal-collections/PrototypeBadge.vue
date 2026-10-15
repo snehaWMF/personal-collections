@@ -5,13 +5,26 @@
  */
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { CdxButton, CdxIcon } from '@wikimedia/codex'
+import { CdxButton, CdxIcon, CdxRadio } from '@wikimedia/codex'
 import { cdxIconClose, cdxIconLabFlask } from '@wikimedia/codex-icons'
 
-import { ARTICLE_PATH, useCollections } from './useCollections'
+import { ARTICLE_PATH, useCollections, type SavedNav } from './useCollections'
 
 const router = useRouter()
-const { resetDemo } = useCollections()
+const { resetDemo, ui } = useCollections()
+
+const NAV_OPTIONS: { value: SavedNav; label: string; description: string }[] = [
+  {
+    value: 'sidebar',
+    label: 'Sidebar and list',
+    description: 'Collections in a sidebar on wide screens, a list on narrow ones',
+  },
+  {
+    value: 'tabs',
+    label: 'Tabs and dropdown',
+    description: 'All items and Collections tabs, with a Collections dropdown',
+  },
+]
 
 const open = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
@@ -66,6 +79,20 @@ onBeforeUnmount(() => {
       <div class="pc-proto__option">
         <CdxButton size="small" @click="reset(false)">Reset with nothing saved</CdxButton>
       </div>
+
+      <fieldset class="pc-proto__nav">
+        <legend class="pc-proto__legend">Saved page navigation</legend>
+        <CdxRadio
+          v-for="option in NAV_OPTIONS"
+          :key="option.value"
+          v-model="ui.nav"
+          name="pc-proto-nav"
+          :input-value="option.value"
+        >
+          {{ option.label }}
+          <template #description>{{ option.description }}</template>
+        </CdxRadio>
+      </fieldset>
     </div>
 
     <button
@@ -153,7 +180,22 @@ onBeforeUnmount(() => {
   margin-bottom: var(--spacing-50, 8px);
 }
 
-.pc-proto__option:last-child {
-  margin-bottom: 0;
+.pc-proto__nav {
+  margin: var(--spacing-100, 16px) 0 0;
+  padding: var(--spacing-75, 12px) 0 0;
+  border: 0;
+  border-top: 1px solid var(--border-color-subtle, #c8ccd1);
+}
+
+.pc-proto__legend {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--spacing-50, 8px);
+  padding: 0;
+  font-weight: var(--font-weight-bold, 700);
+}
+
+.pc-proto__nav :deep(.cdx-radio) {
+  clear: both;
 }
 </style>

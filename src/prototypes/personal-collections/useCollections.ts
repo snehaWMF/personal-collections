@@ -62,6 +62,16 @@ interface State {
 const STORAGE_KEY = 'protowiki:personal-collections:v6'
 const PIN_KEY = 'protowiki:personal-collections:pinned:v1'
 const MOBILE_VIEW_KEY = 'protowiki:personal-collections:mobile-view:v2'
+const NAV_KEY = 'protowiki:personal-collections:nav:v1'
+
+/**
+ * Saved page navigation, picked from the Prototype menu:
+ *  - `sidebar`: collections always in a sidebar on wide screens, and as a
+ *    list you open first on narrow ones (no dropdown).
+ *  - `tabs`: the original — All items / Collections tabs, with a Collections
+ *    dropdown on desktop that can be moved to the side.
+ */
+export type SavedNav = 'sidebar' | 'tabs'
 
 /** Prototype routes (under the site base). Article pages take `?title=`. */
 export const ARTICLE_PATH = '/article'
@@ -307,6 +317,7 @@ const ui = reactive({
   pinned: readStorage<boolean>(PIN_KEY) === true,
   /** Mobile Saved page layout, chosen from its settings menu (grid by default). */
   mobileView: readStorage<'list' | 'grid'>(MOBILE_VIEW_KEY) === 'list' ? 'list' : 'grid',
+  nav: (readStorage<SavedNav>(NAV_KEY) === 'tabs' ? 'tabs' : 'sidebar') as SavedNav,
 })
 
 // Persist straight away too, so a fresh starting point survives a refresh
@@ -320,6 +331,10 @@ watch(
 watch(
   () => ui.mobileView,
   (view) => writeStorage(MOBILE_VIEW_KEY, view),
+)
+watch(
+  () => ui.nav,
+  (nav) => writeStorage(NAV_KEY, nav),
 )
 
 function slugify(name: string): string {

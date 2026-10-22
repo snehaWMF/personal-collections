@@ -15,14 +15,14 @@ const { resetDemo, ui } = useCollections()
 
 const NAV_OPTIONS: { value: SavedNav; label: string; description: string }[] = [
   {
-    value: 'sidebar',
-    label: 'Sidebar and list',
-    description: 'Collections in a sidebar on wide screens, a list on narrow ones',
-  },
-  {
     value: 'tabs',
     label: 'Tabs and dropdown',
-    description: 'All items and Collections tabs, with a Collections dropdown',
+    description: 'All items tab, with a Collections dropdown',
+  },
+  {
+    value: 'collections-page',
+    label: 'Collections page',
+    description: 'All items and Collections tabs; each collection previews its items',
   },
 ]
 

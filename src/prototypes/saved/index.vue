@@ -16,6 +16,7 @@ import {
   cdxIconDownTriangle,
   cdxIconEllipsis,
   cdxIconLock,
+  cdxIconNext,
   cdxIconSettings,
 } from '@wikimedia/codex-icons'
 
@@ -51,40 +52,41 @@ const collectionsTabTo = { path: SAVED_PAGE, query: { view: 'collections' } }
 
 /**
  * Which navigation to draw (`ui.nav`, from the Prototype menu):
- *  - `tabs-desktop`: the original desktop tabs, with the Collections dropdown.
- *  - `sidebar`: collections always in a sidebar, no dropdown.
- *  - `tabs`: All items / Collections tabs, the Collections tab a list. Phones
- *    in both navigations, and desktop pages too narrow for the sidebar.
+ *  - `tabs-desktop`: All items tab + Collections dropdown (can move to the side).
+ *  - `tabs`: All items / Collections tabs, the Collections tab a list. Phones in
+ *    both navigations, and desktop in the Collections page navigation — where
+ *    each collection's row also previews its newest items.
  */
-/**
- * The sidebar only shows when four cards still fit in a row beside it:
- * sidebar 212 + gap 40, then 4 cards × 194 + 3 gaps × 14. (The grid's
- * `auto-fill` counts columns at the cards' max width, 194, not their min.)
- * Measured on the page's content box, so it follows the real space.
- */
-const SIDEBAR_MIN_WIDTH = 212 + 40 + 4 * 194 + 3 * 14
-const pageRef = ref<{ $el: HTMLElement } | null>(null)
-const pageWidth = ref(Infinity)
-function measurePage(el: HTMLElement) {
-  const style = getComputedStyle(el)
-  pageWidth.value = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-}
-const pageObserver = new ResizeObserver(([entry]) => measurePage(entry.target as HTMLElement))
-// The page renders inside the chrome's slot, which can mount after this does.
-watch(pageRef, (page, old) => {
-  if (old) pageObserver.unobserve(old.$el)
-  if (!page) return
-  measurePage(page.$el)
-  pageObserver.observe(page.$el)
-})
+const layout = computed(() =>
+  isMobile.value || ui.nav === 'collections-page' ? 'tabs' : 'tabs-desktop',
+)
 
-const layout = computed(() => {
-  if (isMobile.value) return 'tabs'
-  if (ui.nav === 'tabs') return 'tabs-desktop'
-  return pageWidth.value < SIDEBAR_MIN_WIDTH ? 'tabs' : 'sidebar'
+/** Newest items first; enough to fill one row on wide screens (the rest are clipped). */
+const PREVIEW_COUNT = 12
+function previewItems(collectionId: string) {
+  return itemsIn(collectionId).slice(0, PREVIEW_COUNT)
+}
+
+/**
+ * Preview tiles need room for at least two cards; narrower than that, the
+ * Collections tab falls back to the compact list phones use. Tile width =
+ * 16 padding × 2 + 200 name column + 24 gap × 2 + 32 arrow + two 140 cards
+ * with a 12 gap. Measured on the list itself, so it follows resizing.
+ */
+const PREVIEW_MIN_WIDTH = 16 * 2 + 200 + 24 * 2 + 32 + (2 * 140 + 12)
+const collectionListRef = ref<HTMLElement | null>(null)
+const collectionListWidth = ref(Infinity)
+const listObserver = new ResizeObserver(([entry]) => {
+  collectionListWidth.value = entry.contentRect.width
 })
-/** Sidebar showing on desktop: always in the sidebar navigation, when moved there in tabs. */
-const pinned = computed(() => layout.value === 'sidebar' || ui.pinned)
+watch(collectionListRef, (list, old) => {
+  if (old) listObserver.unobserve(old)
+  if (!list) return
+  collectionListWidth.value = list.clientWidth
+  listObserver.observe(list)
+})
+/** Compact rows (thumbnail, name, count): phones, and desktop too narrow for previews. */
+const compactRows = computed(() => isMobile.value || collectionListWidth.value < PREVIEW_MIN_WIDTH)
 
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -115,7 +117,7 @@ watch(dropdownOpen, (isOpen) => {
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocPointerDown)
   document.removeEventListener('keydown', onKeydown)
-  pageObserver.disconnect()
+  listObserver.disconnect()
 })
 
 watch(
@@ -144,7 +146,7 @@ function onCollectionCreated(collection: Collection) {
 
 <template>
   <SavedChrome :last-edited-notice="false">
-    <SpecialPageWrapper ref="pageRef" class="saved-page" help>
+    <SpecialPageWrapper class="saved-page" help>
       <template #title>
         <template v-if="activeCollection"> Saved / {{ activeCollection.name }} </template>
         <template v-else>Saved</template>
@@ -158,7 +160,7 @@ function onCollectionCreated(collection: Collection) {
         />
       </template>
 
-      <!-- ---------- Tabs, Collections as a list: phones and narrow windows ---------- -->
+      <!-- ---------- Tabs, Collections as a list: phones, and desktop's Collections page ---------- -->
       <template v-if="layout === 'tabs'">
         <nav
           class="saved-m-tabs"
@@ -185,21 +187,63 @@ function onCollectionCreated(collection: Collection) {
           <ViewSettings v-if="isMobile" />
         </nav>
 
-        <!-- Collections tab: a plain list with item counts. -->
-        <ul v-if="mobileTab === 'collections' && !activeCollection" class="saved-m-list">
+        <!--
+          Collections tab: a list with item counts. On desktop, where there's
+          room, each row is a tile previewing the collection's newest items.
+        -->
+        <ul
+          v-if="mobileTab === 'collections' && !activeCollection"
+          ref="collectionListRef"
+          class="saved-m-list"
+          :class="{ 'saved-m-list--preview': !compactRows }"
+        >
           <li>
-            <button type="button" class="saved-m-list__create" @click="dialogOpen = true">
+            <button
+              v-if="compactRows"
+              type="button"
+              class="saved-m-list__create"
+              @click="dialogOpen = true"
+            >
               Create collection
             </button>
+            <!-- Desktop: a subtle button above the collection tiles. -->
+            <CdxButton v-else class="saved-preview-create" @click="dialogOpen = true">
+              Create collection
+            </CdxButton>
           </li>
           <li v-for="collection in collections" :key="collection.id">
-            <RouterLink class="saved-m-list__row" :to="collectionTo(collection)">
+            <RouterLink v-if="compactRows" class="saved-m-list__row" :to="collectionTo(collection)">
               <CollectionThumb :collection-id="collection.id" />
               <span class="saved-m-list__text">
                 <span class="saved-m-list__name">{{ collection.name }}</span>
                 <span class="saved-m-list__count">{{ countLabel(collection.id) }}</span>
               </span>
             </RouterLink>
+
+            <div v-else class="saved-preview">
+              <div class="saved-preview__head">
+                <span class="saved-m-list__text">
+                  <RouterLink
+                    class="saved-m-list__name saved-preview__name"
+                    :to="collectionTo(collection)"
+                  >
+                    {{ collection.name }}
+                  </RouterLink>
+                  <span class="saved-m-list__count">{{ countLabel(collection.id) }}</span>
+                </span>
+              </div>
+              <!-- One row of cards; any that don't fit the width are clipped. -->
+              <ul v-if="itemsIn(collection.id).length" class="saved-preview__items">
+                <li v-for="item in previewItems(collection.id)" :key="item.key">
+                  <SavedCard :item="item" compact />
+                </li>
+              </ul>
+              <p v-else class="saved-preview__empty">No items yet</p>
+              <!-- End-of-row cue; the whole tile opens the collection (see the name link). -->
+              <span class="saved-preview__open" aria-hidden="true">
+                <CdxIcon :icon="cdxIconNext" />
+              </span>
+            </div>
           </li>
         </ul>
 
@@ -232,7 +276,7 @@ function onCollectionCreated(collection: Collection) {
         </template>
       </template>
 
-      <!-- ---------- Desktop: sidebar navigation, or tabs + dropdown ---------- -->
+      <!-- ---------- Desktop: All items tab + Collections dropdown ---------- -->
       <template v-else>
         <div class="saved-page__more-row">
           <CdxButton weight="quiet" aria-label="More options">
@@ -240,21 +284,15 @@ function onCollectionCreated(collection: Collection) {
           </CdxButton>
         </div>
 
-        <div class="saved-page__layout" :class="{ 'saved-page__layout--pinned': pinned }">
+        <div class="saved-page__layout" :class="{ 'saved-page__layout--pinned': ui.pinned }">
           <!--
           Pinned: one "Collections" group, like Wikipedia's pinned Contents/Tools
           menus. "All items" is the first row — a smart collection of everything —
           then the create action, then the reader's collections (newest first, so a
           new one appears right under the button that made it).
-          Sidebar navigation: the same list, without the "Collections" heading.
         -->
-          <nav
-            v-if="pinned"
-            class="saved-sidebar"
-            :class="{ 'saved-sidebar--headless': layout === 'sidebar' }"
-            aria-label="Collections"
-          >
-            <div v-if="layout === 'tabs-desktop'" class="saved-sidebar__heading">
+          <nav v-if="ui.pinned" class="saved-sidebar" aria-label="Collections">
+            <div class="saved-sidebar__heading">
               <span>Collections</span>
               <button type="button" class="saved-chip" @click="ui.pinned = false">hide</button>
             </div>
@@ -289,7 +327,7 @@ function onCollectionCreated(collection: Collection) {
           <div class="saved-page__main">
             <div class="saved-page__toolbar">
               <!-- Unpinned: All items + Collections dropdown -->
-              <div v-if="!pinned" class="saved-tabs">
+              <div v-if="!ui.pinned" class="saved-tabs">
                 <RouterLink
                   class="saved-tabs__tab"
                   :class="{ 'saved-tabs__tab--active': !activeCollection }"
@@ -347,7 +385,7 @@ function onCollectionCreated(collection: Collection) {
             </div>
 
             <template v-if="visibleItems.length">
-              <p v-if="!pinned" class="saved-page__sort">Sorted by most recent</p>
+              <p v-if="!ui.pinned" class="saved-page__sort">Sorted by most recent</p>
               <ul class="saved-grid">
                 <li v-for="item in visibleItems" :key="item.key">
                   <SavedCard :item="item" />
@@ -632,18 +670,6 @@ function onCollectionCreated(collection: Collection) {
 }
 
 /* A line under every row so each reads as its own button. */
-/*
- * No heading: the list draws the line the heading would have, level with the
- * top of the cards (below the toolbar: its 8px margin, 44px height, 4px gap).
- */
-.saved-sidebar--headless {
-  padding-top: calc(var(--spacing-50, 8px) + 44px + var(--spacing-25, 4px));
-}
-
-.saved-sidebar--headless .saved-sidebar__list {
-  border-top: 1px solid var(--border-color-subtle, #c8ccd1);
-}
-
 .saved-sidebar__list li {
   margin: 0;
   border-bottom: 1px solid var(--border-color-subtle, #c8ccd1);
@@ -728,9 +754,24 @@ function onCollectionCreated(collection: Collection) {
   list-style: none;
 }
 
-.saved-m-list li {
+.saved-m-list > li {
   margin: 0;
   border-bottom: 1px solid var(--border-color-subtle, #c8ccd1);
+}
+
+/* Desktop previews: each collection on its own light-grey tile, no dividers. */
+.saved-m-list--preview > li {
+  border-bottom: 0;
+}
+
+.saved-m-list--preview > li + li {
+  margin-top: var(--spacing-75, 12px);
+}
+
+/* Codex's medium button, with 14px text to match the bold tabs above it. */
+.saved-preview-create.cdx-button {
+  margin: var(--spacing-100, 16px) 0 var(--spacing-25, 4px);
+  font-size: var(--font-size-small, 14px);
 }
 
 .saved-m-list__create {
@@ -771,6 +812,115 @@ function onCollectionCreated(collection: Collection) {
 .saved-m-list__name {
   font-size: var(--font-size-large, 18px);
   line-height: var(--line-height-small, 1.375);
+}
+
+/* ---- Desktop Collections page: rows previewing each collection ---- */
+/* Three columns: the name and count, the cards, then an arrow into the collection. */
+.saved-preview {
+  position: relative;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) auto;
+  gap: var(--spacing-150, 24px);
+  align-items: start;
+  padding: var(--spacing-100, 16px);
+  border-radius: var(--border-radius-base, 2px);
+  background-color: var(--background-color-interactive-subtle, #f8f9fa);
+}
+
+.saved-preview__head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-75, 12px);
+  min-width: 0;
+}
+
+.saved-preview__name {
+  color: var(--color-base, #202122);
+  text-decoration: none;
+}
+
+/*
+ * The whole tile is clickable: the name link stretches over it. The cards sit
+ * above that layer so they still open their own articles.
+ */
+.saved-preview__name::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--border-radius-base, 2px);
+}
+
+.saved-preview__name:focus-visible {
+  outline: none;
+}
+
+.saved-preview__name:focus-visible::after {
+  outline: 2px solid var(--outline-color-progressive--focus, #36c);
+}
+
+/* Only the cards themselves sit above it — gaps in the row still open the collection. */
+.saved-preview__items {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.saved-preview__items > li > * {
+  pointer-events: auto;
+}
+
+/* Hovering the tile (not a card) highlights it and its name. */
+.saved-preview:hover:not(:has(.saved-card:hover)) {
+  background-color: var(--background-color-interactive, #eaecf0);
+}
+
+.saved-preview:hover:not(:has(.saved-card:hover)) .saved-preview__name {
+  color: var(--color-progressive, #36c);
+  text-decoration: underline;
+}
+
+.saved-preview__open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--border-radius-base, 2px);
+  color: var(--color-base, #202122);
+}
+
+/*
+ * A single row: extra cards go into zero-height rows and are clipped. The
+ * small padding keeps the cards' focus outline inside the clip.
+ */
+.saved-preview__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-rows: auto;
+  grid-auto-rows: 0;
+  column-gap: var(--spacing-75, 12px);
+  row-gap: 0;
+  overflow: hidden;
+  margin: -3px;
+  padding: 3px;
+  list-style: none;
+}
+
+.saved-preview__items > li {
+  display: flex;
+  margin: 0;
+}
+
+.saved-preview__items > li > * {
+  flex: 1;
+}
+
+.saved-preview__empty {
+  margin: 0;
+  color: var(--color-subtle, #54595d);
+  font-size: var(--font-size-small, 14px);
 }
 
 .saved-m-rows {

@@ -8,6 +8,8 @@
  * (icon + "Section" / "Passage") as supporting text underneath.
  *
  * `list` (mobile): a row — square thumbnail on the left, the same text on the right.
+ * `compact`: a small grid card for previews (collection rows) — shorter image,
+ *   title only for articles, shorter excerpt for passages.
  */
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
@@ -16,7 +18,7 @@ import { cdxIconImage, cdxIconQuotes, cdxIconTextSummary } from '@wikimedia/code
 
 import { linkOf, useCollections, type SavedItem } from './useCollections'
 
-const props = defineProps<{ item: SavedItem; list?: boolean }>()
+const props = defineProps<{ item: SavedItem; list?: boolean; compact?: boolean }>()
 
 const { summary } = useCollections()
 const data = computed(() => summary(props.item.title))
@@ -76,7 +78,12 @@ const hasImage = computed(() => !!imageUrl.value)
   </RouterLink>
 
   <!-- Grid card -->
-  <RouterLink v-else class="saved-card" :class="`saved-card--${item.kind}`" :to="linkOf(item)">
+  <RouterLink
+    v-else
+    class="saved-card"
+    :class="[`saved-card--${item.kind}`, { 'saved-card--compact': compact }]"
+    :to="linkOf(item)"
+  >
     <!-- Content first: the passage's words, or the image. -->
     <blockquote v-if="item.kind === 'passage'" class="saved-card__quote">
       {{ item.excerpt }}
@@ -100,7 +107,7 @@ const hasImage = computed(() => !!imageUrl.value)
         <br />
         <span class="saved-card__description">From: {{ articleTitle }}</span>
       </template>
-      <template v-else-if="data?.description">
+      <template v-else-if="data?.description && !compact">
         <br />
         <span class="saved-card__description">{{ data.description }}</span>
       </template>
@@ -139,7 +146,6 @@ const hasImage = computed(() => !!imageUrl.value)
 .saved-card:hover {
   border-color: var(--border-color-progressive--hover, #3056a9);
 }
-
 
 .saved-card:focus-visible {
   outline: 2px solid var(--outline-color-progressive--focus, #36c);
@@ -216,6 +222,26 @@ const hasImage = computed(() => !!imageUrl.value)
   color: var(--color-subtle, #54595d);
 }
 
+/* ---- Compact (collection previews) ---- */
+.saved-card--compact {
+  min-height: 0;
+  padding: var(--spacing-50, 8px);
+}
+
+.saved-card--compact .saved-card__image {
+  aspect-ratio: 4 / 3;
+  margin-bottom: var(--spacing-50, 8px);
+}
+
+.saved-card--compact .saved-card__text {
+  -webkit-line-clamp: 2;
+}
+
+.saved-card--compact .saved-card__quote {
+  -webkit-line-clamp: 4;
+  font-size: var(--font-size-small, 14px);
+}
+
 /* ---- Mobile list row ---- */
 .saved-row {
   display: flex;
@@ -251,7 +277,6 @@ const hasImage = computed(() => !!imageUrl.value)
   font-weight: var(--font-weight-bold, 700);
   line-height: var(--line-height-small, 1.375);
 }
-
 
 .saved-row__description {
   display: -webkit-box;

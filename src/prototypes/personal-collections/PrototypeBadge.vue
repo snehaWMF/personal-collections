@@ -13,17 +13,9 @@ import { ARTICLE_PATH, useCollections, type SavedNav } from './useCollections'
 const router = useRouter()
 const { resetDemo, ui } = useCollections()
 
-const NAV_OPTIONS: { value: SavedNav; label: string; description: string }[] = [
-  {
-    value: 'tabs',
-    label: 'Tabs and dropdown',
-    description: 'All items tab, with a Collections dropdown',
-  },
-  {
-    value: 'collections-page',
-    label: 'Collections page',
-    description: 'All items and Collections tabs; each collection previews its items',
-  },
+const NAV_OPTIONS: { value: SavedNav; label: string }[] = [
+  { value: 'collections-page', label: 'Dedicated collection page' },
+  { value: 'tabs', label: 'Side menu' },
 ]
 
 const open = ref(false)
@@ -90,7 +82,6 @@ onBeforeUnmount(() => {
           :input-value="option.value"
         >
           {{ option.label }}
-          <template #description>{{ option.description }}</template>
         </CdxRadio>
       </fieldset>
     </div>

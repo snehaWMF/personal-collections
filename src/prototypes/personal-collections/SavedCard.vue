@@ -8,8 +8,11 @@
  * (icon + "Section" / "Passage") as supporting text underneath.
  *
  * `list` (mobile): a row — square thumbnail on the left, the same text on the right.
- * `compact`: a small grid card for previews (collection rows) — shorter image,
+ * `compact`: a small grid card for previews (collection rows) — square image,
  *   title only for articles, shorter excerpt for passages.
+ * `thumb`: just a square thumbnail (compact collection rows); the title is its
+ *   tooltip and accessible name. Items with no image show a mini title instead
+ *   (passages: the start of the excerpt).
  */
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
@@ -18,7 +21,12 @@ import { cdxIconImage, cdxIconQuotes, cdxIconTextSummary } from '@wikimedia/code
 
 import { linkOf, useCollections, type SavedItem } from './useCollections'
 
-const props = defineProps<{ item: SavedItem; list?: boolean; compact?: boolean }>()
+const props = defineProps<{
+  item: SavedItem
+  list?: boolean
+  compact?: boolean
+  thumb?: boolean
+}>()
 
 const { summary } = useCollections()
 const data = computed(() => summary(props.item.title))
@@ -30,6 +38,13 @@ const imageUrl = computed(() =>
     : (data.value?.thumbnailUrl ?? null),
 )
 const hasImage = computed(() => !!imageUrl.value)
+
+/** Thumbnail tooltip / accessible name. */
+const thumbLabel = computed(() => {
+  if (props.item.kind === 'section') return `${props.item.heading} (from ${articleTitle.value})`
+  if (props.item.kind === 'passage') return `Passage from ${articleTitle.value}`
+  return articleTitle.value
+})
 </script>
 
 <template>
@@ -74,6 +89,30 @@ const hasImage = computed(() => !!imageUrl.value)
         />
         {{ item.kind === 'section' ? 'Section' : 'Passage' }}
       </span>
+    </span>
+  </RouterLink>
+
+  <!-- Thumbnail only -->
+  <RouterLink
+    v-else-if="thumb"
+    class="saved-thumb"
+    :to="linkOf(item)"
+    :title="thumbLabel"
+    :aria-label="thumbLabel"
+  >
+    <img
+      v-if="item.kind !== 'passage' && hasImage"
+      class="saved-thumb__image"
+      :src="imageUrl!"
+      alt=""
+      loading="lazy"
+    />
+    <span v-else-if="item.kind !== 'passage' && data === undefined" />
+    <span v-else-if="item.kind === 'passage'" class="saved-thumb__text saved-thumb__text--quote">
+      {{ item.excerpt }}
+    </span>
+    <span v-else class="saved-thumb__text">
+      {{ item.kind === 'section' ? item.heading : articleTitle }}
     </span>
   </RouterLink>
 
@@ -143,13 +182,27 @@ const hasImage = computed(() => !!imageUrl.value)
   text-decoration: none;
 }
 
-.saved-card:hover {
-  border-color: var(--border-color-progressive--hover, #3056a9);
+/* Hover / focus match Codex's linked CdxCard. */
+.saved-card,
+.saved-thumb {
+  transition-property: background-color, color, border-color, box-shadow;
+  transition-duration: var(--transition-duration-base, 100ms);
 }
 
-.saved-card:focus-visible {
-  outline: 2px solid var(--outline-color-progressive--focus, #36c);
-  outline-offset: 1px;
+.saved-card:hover,
+.saved-thumb:hover {
+  border-color: var(--border-color-interactive--hover, #27292d);
+}
+
+.saved-card:focus,
+.saved-thumb:focus {
+  outline: 1px solid transparent;
+}
+
+.saved-card:focus-visible,
+.saved-thumb:focus-visible {
+  border-color: var(--border-color-progressive--focus, #36c);
+  box-shadow: inset 0 0 0 1px var(--box-shadow-color-progressive--focus, #36c);
 }
 
 .saved-card__image {
@@ -222,6 +275,73 @@ const hasImage = computed(() => !!imageUrl.value)
   color: var(--color-subtle, #54595d);
 }
 
+/* ---- Thumbnail only (compact collection rows) ---- */
+.saved-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border: 1px solid var(--border-color-subtle, #c8ccd1);
+  border-radius: var(--border-radius-base, 2px);
+  background-color: var(--background-color-base, #fff);
+}
+
+/* The image fills the square, so draw Codex's inset focus line above it. */
+.saved-thumb {
+  position: relative;
+}
+
+.saved-thumb:focus-visible::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 1px var(--box-shadow-color-progressive--focus, #36c);
+}
+
+.saved-thumb__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/*
+ * Mini title for items with no image: Codex's "Figure caption" size and weight
+ * (14px, normal), with tighter letter and line spacing so three lines fit in
+ * 64px, then an ellipsis; the full title shows on hover.
+ */
+.saved-thumb__text {
+  display: -webkit-box;
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--spacing-25, 4px);
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--color-base, #202122);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small, 14px);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  /* Break long words with a proper hyphen ("Inter-stellar"); if that can't fit, break anyway. */
+  hyphens: auto;
+  overflow-wrap: break-word;
+}
+
+/* Passages: the excerpt, in serif like on their cards. */
+.saved-thumb__text--quote {
+  font-family: var(--font-family-serif, 'Linux Libertine', Georgia, serif);
+}
+
+.saved-thumb:has(.saved-thumb__text) {
+  align-items: flex-start;
+  background-color: var(--background-color-interactive-subtle, #f8f9fa);
+}
+
 /* ---- Compact (collection previews) ---- */
 .saved-card--compact {
   min-height: 0;
@@ -229,7 +349,7 @@ const hasImage = computed(() => !!imageUrl.value)
 }
 
 .saved-card--compact .saved-card__image {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   margin-bottom: var(--spacing-50, 8px);
 }
 

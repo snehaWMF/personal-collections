@@ -14,6 +14,8 @@ import { wikimediaApiFetchHeaders } from '@/config'
 export interface Collection {
   id: string
   name: string
+  /** Last modified: created, or an item added or removed. Lists sort by this, newest first. */
+  updatedAt: number
 }
 
 export type SaveKind = 'article' | 'section' | 'passage'
@@ -61,17 +63,24 @@ interface State {
 
 const STORAGE_KEY = 'protowiki:personal-collections:v6'
 const PIN_KEY = 'protowiki:personal-collections:pinned:v1'
-const MOBILE_VIEW_KEY = 'protowiki:personal-collections:mobile-view:v2'
-const NAV_KEY = 'protowiki:personal-collections:nav:v2'
+const NAV_KEY = 'protowiki:personal-collections:nav:v3'
+const COLLECTIONS_VIEW_KEY = 'protowiki:personal-collections:collections-view:v2'
 
 /**
  * Saved page navigation on desktop, picked from the Prototype menu (phones
  * always use All items / Collections tabs):
- *  - `tabs`: All items tab + Collections dropdown, which can move to the side.
- *  - `collections-page`: All items / Collections tabs, as on phones; the
- *    Collections tab lists each collection with a preview of its items.
+ *  - `collections-page` (default, "Dedicated collection page"): All items /
+ *    Collections tabs, as on phones; the Collections tab lists each collection.
+ *  - `tabs` ("Side menu"): All items tab + Collections dropdown, which can
+ *    move to the side.
  */
 export type SavedNav = 'tabs' | 'collections-page'
+
+/**
+ * Desktop Collections tab layout: `expanded` = tiles previewing each
+ * collection's items; `compact` = the phone-style list. Phones are always compact.
+ */
+export type CollectionsView = 'expanded' | 'compact'
 
 /** Prototype routes (under the site base). Article pages take `?title=`. */
 export const ARTICLE_PATH = '/article'
@@ -174,7 +183,7 @@ const SEED_TARGETS: SaveTarget[] = [
 ]
 
 /** Pre-filled collections; entries are saved-item keys (an article key is its title). */
-const SEED_COLLECTIONS: (Collection & { keys: string[] })[] = [
+const SEED_COLLECTIONS: (Omit<Collection, 'updatedAt'> & { keys: string[] })[] = [
   {
     id: 'my-nemesis-birds-list',
     name: 'My nemesis birds list',
@@ -182,7 +191,8 @@ const SEED_COLLECTIONS: (Collection & { keys: string[] })[] = [
   },
   {
     id: 'forest-ecology',
-    name: 'Forest ecology',
+    // Deliberately long, to show how long collection names wrap and truncate.
+    name: 'Forest ecology: Forest Ecology, Biodiversity, Woodland Ecosystems, Seasonal Changes, Native Flora and Fauna, Fungal Networks, and the Intricate Relationships Between Trees, Soil and Wildlife',
     keys: [
       'Old-growth forest',
       'Mycorrhizal network',
@@ -249,7 +259,8 @@ function seedState(withCollections = true): State {
   return {
     startArticle: START_ARTICLE.withCollections,
     onboarding: 'done',
-    collections: collections.map(({ id, name }) => ({ id, name })),
+    // No real history for the samples: keep their listed order as "last modified".
+    collections: collections.map(({ id, name }, i) => ({ id, name, updatedAt: now - i * 60_000 })),
     items: SEED_TARGETS.map((target, i) => {
       const key = keyOf(target)
       const savedAt = now - (i + 1) * 3_600_000
@@ -309,17 +320,21 @@ function initialState(): State {
     window.location.pathname.replace(/\/$/, '').endsWith(ARTICLE_PATH) && !window.location.search
   if (bare) return seedState(true)
   const stored = readStorage<State>(STORAGE_KEY)
-  return isState(stored) ? stored : seedState()
+  if (!isState(stored)) return seedState()
+  // Saved before collections tracked "last modified": keep their current order.
+  const now = Date.now()
+  stored.collections.forEach((c, i) => (c.updatedAt ??= now - i * 60_000))
+  return stored
 }
 
 const state = reactive<State>(initialState())
 const ui = reactive({
   pinned: readStorage<boolean>(PIN_KEY) === true,
-  /** Mobile Saved page layout, chosen from its settings menu (grid by default). */
-  mobileView: readStorage<'list' | 'grid'>(MOBILE_VIEW_KEY) === 'list' ? 'list' : 'grid',
-  nav: (readStorage<SavedNav>(NAV_KEY) === 'collections-page'
-    ? 'collections-page'
-    : 'tabs') as SavedNav,
+  nav: (readStorage<SavedNav>(NAV_KEY) === 'tabs' ? 'tabs' : 'collections-page') as SavedNav,
+  /** Desktop Collections tab layout, from its Expanded / Compact toggle (expanded by default). */
+  collectionsView: (readStorage<CollectionsView>(COLLECTIONS_VIEW_KEY) === 'compact'
+    ? 'compact'
+    : 'expanded') as CollectionsView,
 })
 
 // Persist straight away too, so a fresh starting point survives a refresh
@@ -331,12 +346,12 @@ watch(
   (pinned) => writeStorage(PIN_KEY, pinned),
 )
 watch(
-  () => ui.mobileView,
-  (view) => writeStorage(MOBILE_VIEW_KEY, view),
-)
-watch(
   () => ui.nav,
   (nav) => writeStorage(NAV_KEY, nav),
+)
+watch(
+  () => ui.collectionsView,
+  (view) => writeStorage(COLLECTIONS_VIEW_KEY, view),
 )
 
 function slugify(name: string): string {
@@ -382,7 +397,16 @@ function loadSummary(title: string): void {
 // --- Public API ---------------------------------------------------------------
 
 export function useCollections() {
-  const collections = computed(() => state.collections)
+  /** Last modified first. */
+  const collections = computed(() =>
+    [...state.collections].sort((a, b) => b.updatedAt - a.updatedAt),
+  )
+
+  /** Mark collections as just modified (moves them to the top of every list). */
+  function touch(...collectionIds: string[]): void {
+    const now = Date.now()
+    for (const c of state.collections) if (collectionIds.includes(c.id)) c.updatedAt = now
+  }
   const items = computed(() => [...state.items].sort((a, b) => b.savedAt - a.savedAt))
 
   function getItem(key: string): SavedItem | undefined {
@@ -409,6 +433,8 @@ export function useCollections() {
   }
 
   function unsave(key: string): void {
+    // Unsaving also takes the item out of every collection it was in.
+    touch(...Object.keys(getItem(key)?.collections ?? {}))
     state.items = state.items.filter((i) => i.key !== key)
   }
 
@@ -418,11 +444,14 @@ export function useCollections() {
 
   function addToCollection(target: SaveTarget, collectionId: string): void {
     save(target).collections[collectionId] = Date.now()
+    touch(collectionId)
   }
 
   function removeFromCollection(key: string, collectionId: string): void {
     const item = getItem(key)
-    if (item) delete item.collections[collectionId]
+    if (!item?.collections[collectionId]) return
+    delete item.collections[collectionId]
+    touch(collectionId)
   }
 
   function findCollection(id: string | null | undefined): Collection | undefined {
@@ -435,8 +464,8 @@ export function useCollections() {
   }
 
   function createCollection(name: string): Collection {
-    const collection = { id: slugify(name), name: name.trim() }
-    // Newest first: a new collection shows at the top of every list.
+    // Just modified, so a new collection shows at the top of every list.
+    const collection = { id: slugify(name), name: name.trim(), updatedAt: Date.now() }
     state.collections.unshift(collection)
     return collection
   }

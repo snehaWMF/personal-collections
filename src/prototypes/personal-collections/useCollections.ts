@@ -192,7 +192,7 @@ const SEED_COLLECTIONS: (Omit<Collection, 'updatedAt'> & { keys: string[] })[] =
   {
     id: 'forest-ecology',
     // Deliberately long, to show how long collection names wrap and truncate.
-    name: 'Forest ecology: Forest Ecology, Biodiversity, Woodland Ecosystems, Seasonal Changes, Native Flora and Fauna, Fungal Networks, and the Intricate Relationships Between Trees, Soil and Wildlife',
+    name: 'Forest Ecology, Biodiversity, Woodland Ecosystems, Seasonal Changes, Native Flora and Fauna, Fungal Networks, and the Intricate Relationships Between Trees, Soil and Wildlife',
     keys: [
       'Old-growth forest',
       'Mycorrhizal network',

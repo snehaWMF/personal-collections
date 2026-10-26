@@ -1,0 +1,1 @@
+import{d as o,c as r,x as t,y as s,o as a}from"./index-A3mPAfU0.js";import{S as n}from"./useCollections-GTH7_3HC.js";const d=o({__name:"index",setup(u){const e=t();return s().replace({path:n,query:e.query}),(p,_)=>(a(),r("span"))}});export{d as default};
